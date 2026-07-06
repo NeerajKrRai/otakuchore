@@ -1,0 +1,15 @@
+name = "otakuchore-sync"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# KV namespace holds one entry per family (fam:<id>) + short-lived pairing codes (pair:<CODE>).
+# Create it once, then paste the returned id below:
+#   npx wrangler kv namespace create SYNC
+[[kv_namespaces]]
+binding = "KV"
+id = "cc546957ede142c89f8d799401c23610"
+
+# Optional: extra CORS origins beyond https://apps.neeksha.com (comma-separated).
+# Handy for local testing against a dev server.
+# [vars]
+# ALLOWED_ORIGINS = "http://localhost:8877"

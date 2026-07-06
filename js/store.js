@@ -1,127 +1,173 @@
 /* ============================================================
-   store.js — localStorage persistence layer (zero backend)
-   One install = one family. All data lives on this device.
+   store.js — localStorage persistence + sync-safe data model.
+   One install = one family (the local cache of a cloud family).
+   Every record carries updatedAt; deletes are tombstones
+   (deleted:true) so multi-device merge is conflict-free.
+   `mode` is DEVICE-LOCAL and never synced.
    Exposes: window.DB
    ============================================================ */
 (function () {
   'use strict';
 
   var KEYS = {
-    family:      'ct_family',       // { name, createdAt }
-    profiles:    'ct_profiles',     // [ profile ]
-    chores:      'ct_chores',       // [ chore ]
-    completions: 'ct_completions',  // [ completion ]  (chore approval queue)
-    rewards:     'ct_rewards',      // [ reward ]
-    redemptions: 'ct_redemptions',  // [ redemption ]  (reward approval queue)
-    ledger:      'ct_ledger',       // [ ledgerEntry ]
-    proofs:      'ct_proofs',       // [ proof ]        (media binary lives in IndexedDB)
-    messages:    'ct_messages',     // [ message ]      (per-quest chat)
-    mode:        'ct_mode',         // { role:'locked'|'parent'|'kid', profileId }
-    seeded:      'ct_seeded'        // { chores:bool, rewards:bool } — starter packs offered-once
+    family:      'ct_family',       // { name, createdAt, updatedAt }
+    seeded:      'ct_seeded',       // { chores:bool, rewards:bool, updatedAt }
+    profiles:    'ct_profiles',
+    chores:      'ct_chores',
+    completions: 'ct_completions',
+    rewards:     'ct_rewards',
+    redemptions: 'ct_redemptions',
+    ledger:      'ct_ledger',
+    proofs:      'ct_proofs',
+    messages:    'ct_messages',
+    mode:        'ct_mode'          // { role, profileId } — LOCAL ONLY, not synced
   };
+  // collections that are part of the syncable family document (arrays of records)
+  var COLLECTIONS = ['profiles', 'chores', 'completions', 'rewards', 'redemptions', 'ledger', 'proofs', 'messages'];
+  // singletons that sync (merge by updatedAt)
+  var SINGLETONS = ['family', 'seeded'];
 
-  /* ---- raw get/set with safe JSON + quota guard ---- */
+  /* ---- raw get/set ---- */
   function get(key, fallback) {
     try {
       var raw = localStorage.getItem(key);
       if (raw === null || raw === undefined) return fallback;
       return JSON.parse(raw);
-    } catch (e) {
-      console.warn('DB.get failed for', key, e);
-      return fallback;
-    }
+    } catch (e) { console.warn('DB.get failed', key, e); return fallback; }
   }
   function set(key, val) {
-    try {
-      localStorage.setItem(key, JSON.stringify(val));
-      return true;
-    } catch (e) {
-      // localStorage is small; we never put media here, so this should be rare.
-      console.warn('DB.set failed for', key, e);
-      return false;
-    }
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+    catch (e) { console.warn('DB.set failed', key, e); return false; }
   }
 
-  /* ---- id + time helpers (replace DynamoDB-managed fields) ---- */
+  /* ---- id + time ---- */
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Math.floor(performance.now() * 1000).toString(36) + '-' +
-           (window.crypto && crypto.getRandomValues
-             ? crypto.getRandomValues(new Uint32Array(1))[0].toString(36)
-             : Math.floor(performance.now()).toString(36));
+      (window.crypto && crypto.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0].toString(36) : Math.floor(performance.now()).toString(36));
   }
   function now() { return new Date().toISOString(); }
 
-  /* ---- collection accessors (always return an array) ---- */
-  function coll(key) { return get(key, []); }
-  function saveColl(key, arr) { return set(key, arr); }
+  /* ---- change notification (local writes only; sync-applied merges do NOT fire) ---- */
+  var _subs = [];
+  function subscribe(fn) { _subs.push(fn); return function () { _subs = _subs.filter(function (f) { return f !== fn; }); }; }
+  function notifyLocal() { for (var i = 0; i < _subs.length; i++) { try { _subs[i](); } catch (e) {} } }
+
+  /* ---- collection API ---- */
+  function keyOf(name) { return KEYS[name] || name; }
+  function rawList(name) { return get(keyOf(name), []); }
+  function setRaw(name, arr) { return set(keyOf(name), arr); }
+  function list(name) { return rawList(name).filter(function (r) { return !r.deleted; }); }
+  function find(name, id) {
+    var arr = rawList(name);
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === id && !arr[i].deleted) return arr[i];
+    return null;
+  }
+  // insert-or-replace by id; stamps updatedAt; returns the stored record
+  function upsert(name, rec) {
+    if (!rec.id) rec.id = uuid();
+    rec.updatedAt = now();
+    var arr = rawList(name), idx = -1;
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === rec.id) { idx = i; break; }
+    if (idx >= 0) arr[idx] = rec; else arr.push(rec);
+    setRaw(name, arr);
+    notifyLocal();
+    return rec;
+  }
+  // soft-delete (tombstone) so the deletion propagates through sync
+  function remove(name, id) {
+    var arr = rawList(name), changed = false;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].id === id && !arr[i].deleted) { arr[i].deleted = true; arr[i].updatedAt = now(); changed = true; break; }
+    }
+    if (changed) { setRaw(name, arr); notifyLocal(); }
+    return changed;
+  }
+
+  /* ---- singletons ---- */
+  function family() { return get(KEYS.family, null); }
+  function setFamily(f) { f = f || {}; f.updatedAt = now(); var r = set(KEYS.family, f); notifyLocal(); return r; }
+  function seeded() { return get(KEYS.seeded, { chores: false, rewards: false }); }
+  function setSeeded(s) { s = s || {}; s.updatedAt = now(); var r = set(KEYS.seeded, s); notifyLocal(); return r; }
+  function mode() { return get(KEYS.mode, { role: 'locked', profileId: null }); }
+  function setMode(m) { return set(KEYS.mode, m); } // local only, no updatedAt, not synced
+
+  /* ---- sync document (raw, incl tombstones; NO mode) ---- */
+  function snapshot() {
+    var doc = { family: family(), seeded: seeded() };
+    COLLECTIONS.forEach(function (c) { doc[c] = rawList(c); });
+    return doc;
+  }
+  // newest-updatedAt-wins, deterministic tie-break (greater JSON) for convergence
+  function pickNewer(a, b) {
+    if (!a) return b; if (!b) return a;
+    var ta = a.updatedAt || '', tb = b.updatedAt || '';
+    if (ta > tb) return a;
+    if (tb > ta) return b;
+    return JSON.stringify(a) >= JSON.stringify(b) ? a : b;
+  }
+  function mergeCollections(localArr, remoteArr) {
+    var byId = {};
+    (localArr || []).forEach(function (r) { byId[r.id] = r; });
+    (remoteArr || []).forEach(function (r) { byId[r.id] = pickNewer(byId[r.id], r); });
+    return Object.keys(byId).map(function (k) { return byId[k]; });
+  }
+  // merge a remote family doc into the local store (ongoing sync). returns true if local changed.
+  function mergeInto(remoteDoc) {
+    if (!remoteDoc) return false;
+    var before = JSON.stringify(snapshot());
+    SINGLETONS.forEach(function (s) {
+      if (remoteDoc[s] !== undefined) {
+        var merged = pickNewer(get(KEYS[s], null), remoteDoc[s]);
+        if (merged) set(KEYS[s], merged);
+      }
+    });
+    COLLECTIONS.forEach(function (c) {
+      if (remoteDoc[c] !== undefined) setRaw(c, mergeCollections(rawList(c), remoteDoc[c]));
+    });
+    return JSON.stringify(snapshot()) !== before;
+  }
+  // replace local family data wholesale (used when JOINING a cloud family). mode reset by caller.
+  function replaceWith(remoteDoc) {
+    if (!remoteDoc) return;
+    SINGLETONS.forEach(function (s) { if (remoteDoc[s] !== undefined) set(KEYS[s], remoteDoc[s]); });
+    COLLECTIONS.forEach(function (c) { setRaw(c, remoteDoc[c] || []); });
+  }
+
+  /* ---- misc ---- */
+  function hasFamily() { return family() !== null; }
+  function wipe() {
+    Object.keys(KEYS).forEach(function (k) { try { localStorage.removeItem(KEYS[k]); } catch (e) {} });
+  }
+  function exportAll() {
+    var doc = snapshot();
+    doc.exportedAt = now();
+    return doc;
+  }
 
   var DB = {
-    KEYS: KEYS,
-    get: get,
-    set: set,
-    uuid: uuid,
-    now: now,
-
-    /* whole-collection getters */
-    profiles:    function () { return coll(KEYS.profiles); },
-    chores:      function () { return coll(KEYS.chores); },
-    completions: function () { return coll(KEYS.completions); },
-    rewards:     function () { return coll(KEYS.rewards); },
-    redemptions: function () { return coll(KEYS.redemptions); },
-    ledger:      function () { return coll(KEYS.ledger); },
-    proofs:      function () { return coll(KEYS.proofs); },
-    messages:    function () { return coll(KEYS.messages); },
-
-    /* whole-collection setters */
-    setProfiles:    function (a) { return saveColl(KEYS.profiles, a); },
-    setChores:      function (a) { return saveColl(KEYS.chores, a); },
-    setCompletions: function (a) { return saveColl(KEYS.completions, a); },
-    setRewards:     function (a) { return saveColl(KEYS.rewards, a); },
-    setRedemptions: function (a) { return saveColl(KEYS.redemptions, a); },
-    setLedger:      function (a) { return saveColl(KEYS.ledger, a); },
-    setProofs:      function (a) { return saveColl(KEYS.proofs, a); },
-    setMessages:    function (a) { return saveColl(KEYS.messages, a); },
-
-    /* singletons */
-    family:    function () { return get(KEYS.family, null); },
-    setFamily: function (f) { return set(KEYS.family, f); },
-    mode:      function () { return get(KEYS.mode, { role: 'locked', kidId: null }); },
-    setMode:   function (m) { return set(KEYS.mode, m); },
-    seeded:    function () { return get(KEYS.seeded, { chores: false, rewards: false }); },
-    setSeeded: function (s) { return set(KEYS.seeded, s); },
-
-    /* find-by-id helpers */
-    profile: function (id) { return DB.profiles().find(function (p) { return p.id === id; }) || null; },
-    chore:   function (id) { return DB.chores().find(function (c) { return c.id === id; }) || null; },
-    reward:  function (id) { return DB.rewards().find(function (r) { return r.id === id; }) || null; },
-
-    /* has a family been created yet? */
-    hasFamily: function () { return DB.family() !== null; },
-
-    /* nuke everything (used by "reset app" in settings) */
-    wipe: function () {
-      Object.keys(KEYS).forEach(function (k) {
-        try { localStorage.removeItem(KEYS[k]); } catch (e) {}
-      });
-    },
-
-    /* export the whole family as a plain object (backup / future share) */
-    exportAll: function () {
-      return {
-        family:      DB.family(),
-        profiles:    DB.profiles(),
-        chores:      DB.chores(),
-        completions: DB.completions(),
-        rewards:     DB.rewards(),
-        redemptions: DB.redemptions(),
-        ledger:      DB.ledger(),
-        proofs:      DB.proofs(),
-        messages:    DB.messages(),
-        exportedAt:  now()
-      };
-    }
+    KEYS: KEYS, COLLECTIONS: COLLECTIONS,
+    get: get, set: set, uuid: uuid, now: now, subscribe: subscribe,
+    // collection API
+    rawList: rawList, setRaw: setRaw, list: list, find: find, upsert: upsert, remove: remove,
+    // convenience live getters
+    profiles:    function () { return list('profiles'); },
+    chores:      function () { return list('chores'); },
+    completions: function () { return list('completions'); },
+    rewards:     function () { return list('rewards'); },
+    redemptions: function () { return list('redemptions'); },
+    ledger:      function () { return list('ledger'); },
+    proofs:      function () { return list('proofs'); },
+    messages:    function () { return list('messages'); },
+    profile: function (id) { return find('profiles', id); },
+    chore:   function (id) { return find('chores', id); },
+    reward:  function (id) { return find('rewards', id); },
+    // singletons
+    family: family, setFamily: setFamily, seeded: seeded, setSeeded: setSeeded, mode: mode, setMode: setMode,
+    // sync
+    snapshot: snapshot, mergeInto: mergeInto, replaceWith: replaceWith, mergeCollections: mergeCollections, pickNewer: pickNewer,
+    // misc
+    hasFamily: hasFamily, wipe: wipe, exportAll: exportAll
   };
-
   window.DB = DB;
 })();

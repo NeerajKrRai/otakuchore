@@ -40,9 +40,11 @@
 <div class="modal-overlay" id="modal"></div>
 <div class="celebrate" id="celebrate"></div>
 
-<!-- scripts: order matters (store → engine → modules → ui → app) -->
+<!-- scripts: order matters (config → store → engine → sync → modules → ui → app) -->
+<script src="js/config.js"></script>
 <script src="js/store.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/avatar.js"></script>
 <script src="js/booth.js"></script>
 <script src="js/chat.js"></script>

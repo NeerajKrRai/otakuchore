@@ -256,6 +256,7 @@
       '<div class="h-logo">⚡ OtakuChore</div>' +
       '<div class="h-right"><div class="h-user"><div class="h-av">' + avatarInner(p) + '</div>' +
         '<div><div class="h-name">' + esc(p.name) + '</div>' + ptsLine + '</div></div>' +
+        '<span class="sync-ind hidden" id="sync-ind"></span>' +
         '<button class="icon-btn" onclick="UI.lock()">🔄 Switch</button></div>';
     var tabs = isKid ? KID_TABS : PARENT_TABS;
     $('app-tabs').innerHTML = tabs.map(function (t) {
@@ -265,6 +266,7 @@
         '</button>';
     }).join('');
     updateApproveBadge();
+    updateSyncInd();
   }
   function switchTab(key) {
     currentTab = key;
@@ -549,6 +551,7 @@
         '</div></div>';
     });
     html += '<div class="tip">💡 Tip: rewards work best as experiences (movie night, a day out) rather than money — and approving chores yourself keeps the encouragement personal.</div>';
+    html += renderSyncSection();
     html += '<div style="margin-top:16px;display:flex;gap:8px">' +
       '<button class="btn-ghost" style="margin:0" onclick="UI.exportData()">⬇️ Backup data</button>' +
       '<button class="btn-ghost" style="margin:0;border-color:var(--red);color:var(--red)" onclick="UI.resetApp()">Reset app</button></div>';
@@ -786,6 +789,109 @@
     });
   }
 
+  /* ============================================================
+     SYNC & DEVICES (v2)
+     ============================================================ */
+  function syncStatusMeta(st) {
+    switch (st) {
+      case 'synced':   return { cls: 'ok',   label: 'Synced' };
+      case 'syncing':  return { cls: 'busy', label: 'Syncing…' };
+      case 'offline':  return { cls: 'off',  label: 'Offline — will sync when back online' };
+      case 'error':    return { cls: 'err',  label: 'Sync problem' };
+      case 'unlinked': return { cls: 'idle', label: 'Not synced' };
+      default:         return { cls: 'idle', label: '' };
+    }
+  }
+  function updateSyncInd() {
+    var el = $('sync-ind'); if (!el) return;
+    if (!window.Sync || !Sync.enabled()) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    var m = syncStatusMeta(Sync.status());
+    el.className = 'sync-ind ' + m.cls;
+    el.title = m.label;
+  }
+  function onSyncStatus() { updateSyncInd(); }
+  function onSyncUpdate() {
+    // remote changes arrived — re-render the current view, guarding a remotely-deleted profile
+    if ($('main-screen').classList.contains('active')) {
+      if (!actingProfile()) { lock(); return; }
+      renderMain();
+      switchTab(currentTab || (role() === 'parent' ? 'chores' : 'home'));
+    } else if ($('screen-hub').classList.contains('active')) {
+      renderHub();
+    }
+  }
+  function renderSyncSection() {
+    if (!window.Sync || !Sync.enabled()) return '';
+    var linked = Sync.isLinked();
+    var html = '<div class="sync-card"><div class="sync-head">☁️ Sync &amp; Devices</div>';
+    if (linked) {
+      html += '<div class="muted" style="margin-bottom:10px">This family syncs across devices — changes show up everywhere within a few seconds. Kids\' photos stay on each device.</div>' +
+        '<button class="btn-primary" onclick="UI.syncAddDevice()">➕ Add a device</button>' +
+        '<button class="btn-ghost" onclick="UI.syncUnlink()">Unlink this device</button>';
+    } else {
+      html += '<div class="muted" style="margin-bottom:10px">Share this family across phones &amp; tablets. Data only — kids\' selfie proofs never leave the device.</div>' +
+        '<button class="btn-primary" onclick="UI.syncCreate()">☁️ Sync this family to the cloud</button>' +
+        '<button class="btn-ghost" onclick="UI.syncJoinPrompt()">📲 Join a family on this device</button>';
+    }
+    return html + '</div>';
+  }
+  function syncCreate() {
+    UI.toast('Setting up sync…');
+    Sync.createFamily().then(function () { UI.toast('Synced! Tap "Add a device" on your other phone/tablet.'); switchTab('family'); })
+      .catch(function () { UI.toast('Could not reach the sync server.'); });
+  }
+  function syncAddDevice() {
+    Sync.startPairing().then(function (d) { showPairingCode(d.code, d.ttl); })
+      .catch(function () { UI.toast('Could not create a code — check your connection.'); });
+  }
+  var _pairTimer = null;
+  function showPairingCode(code, ttl) {
+    var pretty = code.slice(0, 4) + ' ' + code.slice(4);
+    openModal(
+      '<div class="modal-title">Add a device</div>' +
+      '<div class="modal-sub">On the OTHER device: open OtakuChore → <b>Family</b> → <b>Join a family</b>, and type this code.</div>' +
+      '<div class="pair-code">' + esc(pretty) + '</div>' +
+      '<div class="muted" id="pair-count" style="margin-bottom:12px"></div>' +
+      '<button class="modal-confirm-btn" style="background:linear-gradient(135deg,var(--accent),#6d28d9)" onclick="UI.copyText(\'' + code + '\')">📋 Copy code</button>' +
+      '<button class="modal-cancel-btn" onclick="UI.closeModal()">Done</button>'
+    );
+    var end = Date.now() + (ttl || 600) * 1000;
+    if (_pairTimer) clearInterval(_pairTimer);
+    _pairTimer = setInterval(function () {
+      var el = $('pair-count'); if (!el) { clearInterval(_pairTimer); _pairTimer = null; return; }
+      var left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      el.textContent = left > 0 ? ('Expires in ' + Math.floor(left / 60) + ':' + ('0' + (left % 60)).slice(-2)) : 'Code expired — tap Add a device again';
+      if (left <= 0) { clearInterval(_pairTimer); _pairTimer = null; }
+    }, 1000);
+  }
+  function syncJoinPrompt() {
+    openModal(
+      '<div class="modal-title">Join a family</div>' +
+      '<div class="modal-sub">Enter the code shown on your other device (Family → Add a device).</div>' +
+      '<input id="join-code" maxlength="9" placeholder="ABCD EFGH" autocapitalize="characters" style="text-align:center;font-size:20px;letter-spacing:3px;text-transform:uppercase">' +
+      '<div class="err" id="join-err"></div>' +
+      '<button class="modal-confirm-btn" style="background:linear-gradient(135deg,var(--accent),#6d28d9)" onclick="UI.syncJoin()">Join &amp; sync</button>' +
+      '<button class="modal-cancel-btn" onclick="UI.closeModal()">Cancel</button>'
+    );
+  }
+  function syncJoin() {
+    var code = ($('join-code').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length < 8) { $('join-err').textContent = 'Enter the 8-character code'; return; }
+    $('join-err').textContent = 'Joining…';
+    Sync.redeemCode(code).then(function () { closeModal(); UI.toast('Joined! This device is now synced.'); route(); })
+      .catch(function () { $('join-err').textContent = 'That code did not work (expired or mistyped).'; });
+  }
+  function syncUnlink() {
+    confirmModal('Unlink this device?', 'This device stops syncing. The family data stays here, but changes won\'t travel to or from other devices.', 'Unlink', function () {
+      Sync.leave(); UI.toast('Unlinked from sync.'); switchTab('family');
+    });
+  }
+  function copyText(text) {
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); UI.toast('Code copied 📋'); return; } } catch (e) {}
+    UI.toast('Code: ' + text);
+  }
+
   /* ---------------- shared bits ---------------- */
   function emptyState(emoji, title, sub) {
     return '<div class="empty-state"><span class="ei">' + emoji + '</span><h3>' + esc(title) + '</h3><p>' + esc(sub) + '</p></div>';
@@ -812,6 +918,9 @@
     doChore: doChore, proofFor: proofFor, redeem: redeem, toggleGoal: toggleGoal,
     // chat + settings
     openChat: openChat, exportData: exportData, resetApp: resetApp,
+    // sync (v2)
+    onSyncStatus: onSyncStatus, onSyncUpdate: onSyncUpdate,
+    syncCreate: syncCreate, syncAddDevice: syncAddDevice, syncJoinPrompt: syncJoinPrompt, syncJoin: syncJoin, syncUnlink: syncUnlink, copyText: copyText,
     // for booth to refresh after send
     refreshTab: function () { if (currentTab) switchTab(currentTab); }
   };

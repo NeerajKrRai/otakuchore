@@ -61,6 +61,8 @@
   function init() {
     FX.stars(document.getElementById('stars'));
     if (window.UI) UI.route();
+    // v2: start cross-device sync if a Worker URL is configured (no-op otherwise)
+    if (window.Sync) Sync.init({ onChange: UI.onSyncUpdate, onStatus: UI.onSyncStatus });
   }
   // stop the camera if the tab is hidden / app closed
   document.addEventListener('visibilitychange', function () {
