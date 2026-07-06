@@ -1,0 +1,49 @@
+/* ═══════════════════════════════════════════════
+   CTAvatar — self-contained avatar creator styles
+   Ported from OtakuChore's AV_CSS. Classnames are
+   namespaced with `ctav-` to avoid host collisions.
+   CSS variables are scoped to `.ctav-wrap` and given
+   the same values the host app used, so the module
+   renders identically without any outside stylesheet.
+   ═══════════════════════════════════════════════ */
+
+.ctav-wrap{
+  /* palette (was global :root in the host app) */
+  --ctav-surface:#1a0038;
+  --ctav-card:#250050;
+  --ctav-accent:#7c3aed;
+  --ctav-bright:#c084fc;
+  --ctav-pink:#f472b6;
+  --ctav-green:#34d399;
+  --ctav-muted:#a78bfa;
+
+  max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding-bottom:80px;
+}
+
+@keyframes ctavFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+
+.ctav-preview-box{display:flex;justify-content:center;align-items:center;position:relative;}
+.ctav-preview-svg{width:170px;height:220px;border-radius:20px;overflow:visible;filter:drop-shadow(0 8px 24px rgba(124,58,237,.5));animation:ctavFloat 3s ease-in-out infinite;}
+.ctav-save-strip{display:flex;gap:8px;}
+.ctav-save-btn{flex:1;padding:12px;background:linear-gradient(135deg,var(--ctav-accent),#6d28d9);border:none;border-radius:14px;color:#fff;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,.4);}
+.ctav-save-btn:active{transform:scale(.97);}
+.ctav-rand-btn{padding:12px 16px;background:linear-gradient(135deg,var(--ctav-pink),#be185d);border:none;border-radius:14px;color:#fff;font-weight:900;font-size:15px;cursor:pointer;}
+.ctav-section{background:linear-gradient(160deg,var(--ctav-card),var(--ctav-surface));border-radius:14px;padding:10px;border:1px solid rgba(124,58,237,.3);}
+.ctav-section-title{font-family:'Send Flowers',cursive;font-size:15px;color:var(--ctav-bright);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ctav-options{display:flex;flex-wrap:wrap;gap:4px;}
+.ctav-opt{width:28px;height:28px;border-radius:7px;cursor:pointer;border:2px solid transparent;transition:all .15s;display:flex;align-items:center;justify-content:center;font-size:13px;background:var(--ctav-surface);}
+.ctav-opt:hover{border-color:var(--ctav-muted);transform:scale(1.08);}
+.ctav-opt.sel{border-color:var(--ctav-pink);box-shadow:0 0 8px rgba(244,114,182,.5);transform:scale(1.1);}
+.ctav-colors{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.ctav-color{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0;}
+.ctav-color:hover{transform:scale(1.18);}
+.ctav-color.sel{border-color:#fff;box-shadow:0 0 6px rgba(255,255,255,.7);transform:scale(1.22);}
+.ctav-color-pick{width:20px;height:20px;border-radius:50%;border:2px solid var(--ctav-accent);cursor:pointer;padding:0;overflow:hidden;background:none;flex-shrink:0;}
+.ctav-color-pick input[type=color]{width:200%;height:200%;margin:-50%;border:none;cursor:pointer;}
+.ctav-row{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;}
+.ctav-col{flex:1;min-width:120px;}
+.ctav-toggle{display:flex;gap:5px;margin-top:4px;}
+.ctav-tog-btn{flex:1;padding:6px;border-radius:7px;background:var(--ctav-surface);border:1px solid var(--ctav-accent);color:var(--ctav-muted);font-size:11px;font-weight:700;cursor:pointer;}
+.ctav-tog-btn.on{background:var(--ctav-accent);color:#fff;border-color:var(--ctav-accent);}
+.ctav-saved-badge{background:rgba(52,211,153,.15);border:1px solid var(--ctav-green);color:var(--ctav-green);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:800;text-align:center;display:none;}
+.ctav-sub-label{font-family:'Send Flowers',cursive;font-size:13px;color:var(--ctav-muted);margin-bottom:4px;}

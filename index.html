@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0d0020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OtakuChore">
+
+<title>OtakuChore — Anime Chore Tracker for Families</title>
+<meta name="description" content="OtakuChore is a free, kid-friendly anime chore tracker. Parents assign quests, kids earn stars and streaks, snap selfie proof, and swap points for rewards. Runs entirely in your browser — no account, no ads, no tracking.">
+
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.json">
+
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/avatar.css">
+</head>
+<body>
+<div id="app">
+  <div id="stars"></div>
+
+  <div class="screen" id="screen-welcome"></div>
+  <div class="screen" id="screen-hub"></div>
+  <div class="screen" id="screen-entry"></div>
+  <div class="screen" id="screen-success"></div>
+
+  <div id="main-screen">
+    <div class="header" id="app-header"></div>
+    <div class="tabs" id="app-tabs"></div>
+    <div id="tab-body" style="flex:1;overflow-y:auto;padding:14px;"></div>
+  </div>
+</div>
+
+<!-- overlays -->
+<div class="modal-overlay" id="modal"></div>
+<div class="celebrate" id="celebrate"></div>
+
+<!-- scripts: order matters (store → engine → modules → ui → app) -->
+<script src="js/store.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/avatar.js"></script>
+<script src="js/booth.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+/* Self-hosted fonts — no external requests (latin subset, woff2).
+   Bangers = display/logo, Send Flowers = avatar section titles, Nunito = body. */
+@font-face{font-family:'Bangers';font-style:normal;font-weight:400;font-display:swap;src:url('../fonts/bangers.woff2') format('woff2');}
+@font-face{font-family:'Send Flowers';font-style:normal;font-weight:400;font-display:swap;src:url('../fonts/send-flowers.woff2') format('woff2');}
+@font-face{font-family:'Nunito';font-style:normal;font-weight:400;font-display:swap;src:url('../fonts/nunito-400.woff2') format('woff2');}
+@font-face{font-family:'Nunito';font-style:normal;font-weight:700;font-display:swap;src:url('../fonts/nunito-700.woff2') format('woff2');}
+@font-face{font-family:'Nunito';font-style:normal;font-weight:900;font-display:swap;src:url('../fonts/nunito-900.woff2') format('woff2');}
