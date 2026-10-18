@@ -126,6 +126,9 @@
           '<input id="w-pin" type="password" inputmode="numeric" maxlength="4" placeholder="Recommended, e.g. 1234"></div>' +
         '<div class="err" id="w-err"></div>' +
         '<button class="btn-primary" onclick="UI.submitWelcome()">🎌 Create Family!</button>' +
+        ((window.CT_CONFIG && CT_CONFIG.SYNC_URL) ?
+          '<div class="join-hint">Already made a family on another device?</div>' +
+          '<button class="btn-ghost" style="margin-top:6px" onclick="UI.syncJoinPrompt()">📲 Join that family</button>' : '') +
       '</div>';
     $('screen-welcome')._avatar = Engine.AVATAR_EMOJIS[0];
   }
@@ -173,7 +176,10 @@
         '<div class="how-step"><span>2️⃣</span><div>A <b>kid</b> does a chore &amp; taps it <b>done</b> — snap a selfie in the 📸 Booth!</div></div>' +
         '<div class="how-step"><span>3️⃣</span><div>A grown-up <b>approves</b> it → the kid earns <b>⭐ stars</b>.</div></div>' +
         '<div class="how-step"><span>4️⃣</span><div>Spend ⭐ on <b>rewards</b> like movie night! 🎁</div></div>' +
-      '</div>';
+      '</div>' +
+      '<div class="safe-note">🔒 <b>Made for families.</b> No ads, no sign-ups, works offline. Everything stays on your device — kids\' selfies never leave it. ♡</div>' +
+      ((window.CT_CONFIG && CT_CONFIG.SYNC_URL) ?
+        '<div class="join-hint">On a new device? <button class="join-link" onclick="UI.syncJoinPrompt()">📲 Join a family</button></div>' : '');
   }
   function chooseRole(role) {
     haptic();
@@ -904,9 +910,11 @@
     }, 1000);
   }
   function syncJoinPrompt() {
+    var warn = DB.hasFamily() ? '<div class="modal-warn">⚠️ This device already has a family — joining will <b>replace</b> it with the family you join.</div>' : '';
     openModal(
       '<div class="modal-title">Join a family</div>' +
       '<div class="modal-sub">Enter the code shown on your other device (Family → Add a device).</div>' +
+      warn +
       '<input id="join-code" maxlength="9" placeholder="ABCD EFGH" autocapitalize="characters" style="text-align:center;font-size:20px;letter-spacing:3px;text-transform:uppercase">' +
       '<div class="err" id="join-err"></div>' +
       '<button class="modal-confirm-btn" style="background:linear-gradient(135deg,var(--accent),#6d28d9)" onclick="UI.syncJoin()">Join &amp; sync</button>' +

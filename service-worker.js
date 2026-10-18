@@ -2,7 +2,7 @@
 // network-first for the app shell (so updates land immediately), cache-first
 // for fonts/icons. Only same-origin GETs are handled; cross-origin requests
 // (e.g. the sync Worker on *.workers.dev) pass straight through, untouched.
-const CACHE = 'otakuchore-v2';
+const CACHE = 'otakuchore-v3';
 const ASSETS = [
   './',
   './index.html',
