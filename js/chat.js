@@ -59,9 +59,7 @@
     var input = document.getElementById('chat-input'); if (!input) return;
     var text = input.value.trim(); if (!text) return;
     var p = me(); if (!p) return;
-    var msgs = DB.messages();
-    msgs.push({ id: DB.uuid(), choreId: _choreId, profileId: p.id, from: p.name, role: myRole(), text: text, at: DB.now() });
-    DB.setMessages(msgs);
+    DB.upsert('messages', { id: DB.uuid(), choreId: _choreId, profileId: p.id, from: p.name, role: myRole(), text: text, at: DB.now() });
     input.value = '';
     if (window.UI) UI.haptic(8);
     renderMsgs();

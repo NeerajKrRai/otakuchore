@@ -827,6 +827,7 @@
   }
   function resetApp() {
     confirmModal('Reset everything?', 'This erases ALL family data on this device — profiles, chores, points, everything. Cannot be undone.', '⚠️ Erase all', function () {
+      if (window.Sync && Sync.isLinked()) Sync.leave();   // unlink first so the poll can't re-download the family
       DB.wipe(); if (window.Media) Media.clear();
       DB.setMode({ role: 'locked', profileId: null });
       route();

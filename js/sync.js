@@ -67,6 +67,7 @@
       var familyId = r.data.familyId, token = r.data.token;
       return api('GET', '/family/' + familyId, null, token).then(function (pr) {
         if (!pr.ok) { setStatus('error'); throw new Error('pull-failed'); }
+        if (window.Media) Media.clear();                    // drop the old family's on-device selfies — this is a hard switch
         DB.replaceWith(pr.data.doc);                        // adopt the joined family wholesale
         DB.setMode({ role: 'locked', profileId: null });    // old active profile is no longer valid
         stateSet({ familyId: familyId, token: token, version: pr.data.version });

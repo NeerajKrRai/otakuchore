@@ -201,15 +201,11 @@
       // create (or reuse) the kid's pending completion, tagged with this proof
       var comp = Engine.completeChore(choreId, _kidId, proofId);
       // ensure the completion points at our proof even if it already existed
-      var comps = DB.completions();
-      var cc = comps.find(function (x) { return x.id === comp.id; });
-      if (cc) { cc.proofId = proofId; DB.setCompletions(comps); }
-      var proofs = DB.proofs();
-      proofs.push({
+      if (comp && comp.proofId !== proofId) { comp.proofId = proofId; DB.upsert('completions', comp); }
+      DB.upsert('proofs', {
         id: proofId, choreId: choreId, completionId: comp.id, profileId: _kidId,
         type: type, mediaId: mediaId, at: DB.now(), status: 'pending', seen: false
       });
-      DB.setProofs(proofs);
       UI.haptic(20); UI.celebrate('📸', 'Proof sent!');
       clearCapture();
       renderTab(_cont, _kidId); // reset the booth
