@@ -19,6 +19,7 @@
 
 const PAIR_TTL = 600;                 // pairing code lifetime (seconds)
 const MAX_DOC_BYTES = 512 * 1024;     // family doc size cap (data-only, so small)
+const RL_MAX_CREATES = 20;            // max new families per IP per day (anti-flood; override via env.RL_MAX_CREATES)
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I,L,O,0,1
 const DEFAULT_ORIGINS = ['https://apps.neeksha.com'];
 
@@ -82,6 +83,10 @@ export default {
     try {
       // ---- create a family ----
       if (path === '/family' && request.method === 'POST') {
+        // per-IP daily cap so nobody can script a flood of new families that drains the KV write quota
+        if (await rateLimited(request, env, 'create', +(env && env.RL_MAX_CREATES) || RL_MAX_CREATES)) {
+          return json({ error: 'rate-limited', detail: 'too many new families from this network today — try again tomorrow' }, 429, request, env);
+        }
         const body = await readJson(request);
         if (!body || typeof body.doc !== 'object') return json({ error: 'doc required' }, 400, request, env);
         if (tooBig(body.doc)) return json({ error: 'doc too large' }, 413, request, env);
@@ -152,6 +157,20 @@ export default {
 function tooBig(obj) {
   try { return new TextEncoder().encode(JSON.stringify(obj)).length > MAX_DOC_BYTES; }
   catch (e) { return true; }
+}
+// Soft per-IP daily limiter backed by KV (eventually-consistent, so a tight burst may
+// slip a little — enough to stop a sustained flood without hurting normal use). Never
+// throws: if the counter read/write fails we fail OPEN so real families can still sync.
+async function rateLimited(request, env, bucket, max) {
+  try {
+    const ip = request.headers.get('CF-Connecting-IP') || 'noip';
+    const day = new Date().toISOString().slice(0, 10);
+    const key = 'rl:' + bucket + ':' + day + ':' + ip;
+    const n = parseInt((await env.KV.get(key)) || '0', 10) || 0;
+    if (n >= max) return true;
+    await env.KV.put(key, String(n + 1), { expirationTtl: 90000 }); // ~25h, auto-expires
+    return false;
+  } catch (e) { return false; }
 }
 async function readJson(request) {
   try { return await request.json(); } catch (e) { return null; }
