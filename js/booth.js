@@ -26,12 +26,27 @@
   }
   function tx(mode) { return idb().then(function (db) { return db.transaction(STORE, mode).objectStore(STORE); }); }
 
+  // iOS Safari has a long-standing bug persisting Blob objects in IndexedDB (the put rejects),
+  // which showed up as "Could not save media on this device". Store the raw bytes (ArrayBuffer)
+  // + mime type instead — reliable on every browser — and reconstruct the Blob on read.
+  function toBuf(blob) {
+    if (blob.arrayBuffer) return blob.arrayBuffer();
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(fr.result); };
+      fr.onerror = function () { rej(fr.error || new Error('read-failed')); };
+      fr.readAsArrayBuffer(blob);
+    });
+  }
+
   var Media = {
     put: function (id, blob) {
-      return tx('readwrite').then(function (store) {
-        return new Promise(function (res, rej) {
-          var r = store.put(blob, id);
-          r.onsuccess = function () { res(id); }; r.onerror = function () { rej(r.error); };
+      return toBuf(blob).then(function (buf) {
+        return tx('readwrite').then(function (store) {
+          return new Promise(function (res, rej) {
+            var r = store.put({ buf: buf, type: blob.type || 'application/octet-stream' }, id);
+            r.onsuccess = function () { res(id); }; r.onerror = function () { rej(r.error); };
+          });
         });
       });
     },
@@ -39,7 +54,13 @@
       return tx('readonly').then(function (store) {
         return new Promise(function (res, rej) {
           var r = store.get(id);
-          r.onsuccess = function () { res(r.result ? URL.createObjectURL(r.result) : null); };
+          r.onsuccess = function () {
+            var v = r.result;
+            if (!v) { res(null); return; }
+            // legacy records were raw Blobs; new ones are { buf, type }
+            var blob = (typeof Blob !== 'undefined' && v instanceof Blob) ? v : new Blob([v.buf], { type: v.type || '' });
+            res(URL.createObjectURL(blob));
+          };
           r.onerror = function () { rej(r.error); };
         });
       });
