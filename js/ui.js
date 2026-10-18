@@ -151,10 +151,47 @@
   /* ============================================================
      HUB — lock screen / who's using
      ============================================================ */
+  // Home: ask Grown-up or Kid, with simple how-to-use instructions.
   function renderHub() {
     var fam = DB.family();
-    var profiles = DB.profiles();
-    var slots = profiles.map(function (p, i) {
+    var noParents = Engine.parents().length === 0;
+    $('screen-hub').innerHTML =
+      '<div class="hub-header"><div class="logo" style="font-size:40px">⚡ OtakuChore</div>' +
+        '<p>' + esc(fam ? fam.name : 'Your Family') + '</p></div>' +
+      '<div class="who">Who\'s using OtakuChore? ♪</div>' +
+      '<div class="role-grid">' +
+        '<div class="role-card parent" onclick="UI.chooseRole(\'parent\')">' +
+          '<div class="role-emoji">👑</div><div class="role-label">Grown-up</div>' +
+          '<div class="role-sub">' + (noParents ? 'Tap to set up 👆' : 'Add chores & approve · PIN') + '</div></div>' +
+        '<div class="role-card kid" onclick="UI.chooseRole(\'kid\')">' +
+          '<div class="role-emoji">🧒</div><div class="role-label">Kid</div>' +
+          '<div class="role-sub">Do quests & earn ⭐</div></div>' +
+      '</div>' +
+      '<div class="how">' +
+        '<div class="how-title">✨ How it works</div>' +
+        '<div class="how-step"><span>1️⃣</span><div>A <b>grown-up</b> adds <b>chores</b> &amp; <b>rewards</b>.</div></div>' +
+        '<div class="how-step"><span>2️⃣</span><div>A <b>kid</b> does a chore &amp; taps it <b>done</b> — snap a selfie in the 📸 Booth!</div></div>' +
+        '<div class="how-step"><span>3️⃣</span><div>A grown-up <b>approves</b> it → the kid earns <b>⭐ stars</b>.</div></div>' +
+        '<div class="how-step"><span>4️⃣</span><div>Spend ⭐ on <b>rewards</b> like movie night! 🎁</div></div>' +
+      '</div>';
+  }
+  function chooseRole(role) {
+    haptic();
+    if (role === 'parent') {
+      var ps = Engine.parents();
+      if (ps.length === 0) { openProfileModal(null, 'PARENT'); return; }  // recovery: no parent left
+      if (ps.length === 1) { enterProfile(ps[0].id); return; }
+      renderPicker('parent');
+    } else {
+      var ks = Engine.kids();
+      if (ks.length === 0) { toast('No kids yet — a grown-up can add you in the Family tab 🧒'); return; }
+      if (ks.length === 1) { enterProfile(ks[0].id); return; }
+      renderPicker('kid');
+    }
+  }
+  function renderPicker(role) {
+    var list = role === 'parent' ? Engine.parents() : Engine.kids();
+    var slots = list.map(function (p, i) {
       var pts = p.role === 'CHILD' ? '<div class="m-pts">' + p.pointsBalance + ' ⭐</div>' : '';
       var lock = p.pin ? '<div class="lock">🔒</div>' : '';
       return '<div class="member-slot ' + (p.role === 'PARENT' ? 'parent' : '') + '" style="animation-delay:' + (i * 0.06) + 's" onclick="UI.enterProfile(\'' + p.id + '\')">' +
@@ -164,13 +201,12 @@
         '</div>';
     }).join('');
     $('screen-hub').innerHTML =
-      '<div class="hub-header"><div class="logo" style="font-size:40px">⚡ OtakuChore</div>' +
-        '<p>' + esc(fam ? fam.name : 'Your Family') + '</p></div>' +
-      '<div class="who">Who\'s questing? ♪</div>' +
-      '<div class="member-scene"><div class="notes-layer" id="hub-notes"></div>' +
-        '<div class="member-grid">' + slots + '</div></div>';
-    if (window.FX && FX.notes) FX.notes($('hub-notes'));
+      '<button class="btn-ghost" style="max-width:120px;align-self:flex-start;margin:0 0 6px" onclick="UI.backToRoles()">← Back</button>' +
+      '<div class="who">' + (role === 'parent' ? 'Which grown-up? 👑' : 'Who\'s questing? ♪') + '</div>' +
+      '<div class="member-scene"><div class="member-grid">' + slots + '</div></div>';
+    showScreen('screen-hub');
   }
+  function backToRoles() { renderHub(); showScreen('screen-hub'); }
   function enterProfile(id) {
     var p = DB.profile(id);
     if (!p) return;
@@ -558,8 +594,9 @@
     html += '</div>';
     body.innerHTML = html;
   }
-  function openProfileModal(id) {
+  function openProfileModal(id, defaultRole) {
     var p = id ? DB.profile(id) : null;
+    var dr = p ? p.role : (defaultRole || 'CHILD');
     var emojiChips = Engine.AVATAR_EMOJIS.map(function (e) {
       return '<button type="button" class="chip' + ((p ? p.avatar : '🦊') === e ? ' active' : '') + '" data-emoji="' + e + '" onclick="UI.pickProfileAvatar(this)">' + e + '</button>';
     }).join('');
@@ -568,8 +605,8 @@
       '<div style="text-align:left">' +
         '<div class="field"><label>Name</label><input id="p-name" maxlength="20" value="' + esc(p ? p.name : '') + '" placeholder="e.g. Ariya"></div>' +
         '<div class="field"><label>Role</label><select id="p-role">' +
-          '<option value="CHILD"' + (p && p.role === 'CHILD' ? ' selected' : '') + '>🧒 Kid</option>' +
-          '<option value="PARENT"' + (p && p.role === 'PARENT' ? ' selected' : '') + '>👑 Parent</option></select></div>' +
+          '<option value="CHILD"' + (dr === 'CHILD' ? ' selected' : '') + '>🧒 Kid</option>' +
+          '<option value="PARENT"' + (dr === 'PARENT' ? ' selected' : '') + '>👑 Parent</option></select></div>' +
         '<div class="field"><label>Avatar' + (p && p.avatarCfg ? ' (custom avatar in use — pick an emoji to replace)' : '') + '</label><div class="chip-grid" id="p-avatars" style="max-height:120px;overflow-y:auto">' + emojiChips + '</div></div>' +
         '<div class="field"><label>PIN (4 digits, optional)</label><input id="p-pin" type="password" inputmode="numeric" maxlength="4" value="' + esc(p && p.pin ? p.pin : '') + '" placeholder="Leave blank for no lock"></div>' +
       '</div>' +
@@ -603,6 +640,7 @@
   }
   function deleteProfile(id) {
     var p = DB.profile(id); if (!p) return;
+    if (p.role === 'PARENT' && Engine.parents().length <= 1) { toast("You can't remove the last grown-up 👑"); return; }
     confirmModal('Remove ' + p.name + '?', 'This removes <b style="color:var(--pink)">' + esc(p.name) + '</b> and their points. Chores stay (unassigned).', '🗑️ Remove', function () {
       Engine.deleteProfile(id);
       if (mode().profileId === id) { lock(); }
@@ -903,7 +941,7 @@
     // welcome
     renderWelcome: renderWelcome, pickWelcomeAvatar: pickWelcomeAvatar, submitWelcome: submitWelcome,
     // hub / entry
-    renderHub: renderHub, enterProfile: enterProfile, lock: lock, entryKey: entryKey,
+    renderHub: renderHub, chooseRole: chooseRole, renderPicker: renderPicker, backToRoles: backToRoles, enterProfile: enterProfile, lock: lock, entryKey: entryKey,
     // main
     switchTab: switchTab, updateApproveBadge: updateApproveBadge,
     // parent chores

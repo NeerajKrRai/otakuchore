@@ -398,3 +398,18 @@ select option{background:var(--surface);}
 #hub-home:active{background:rgba(255,255,255,.22);}
 /* the main app screen has its own home affordance (the logo), so hide the floating chip there */
 #main-screen.active ~ #hub-home{display:none;}
+
+/* Home: role front-door + how-to-use */
+.role-grid{display:flex;gap:14px;justify-content:center;width:100%;max-width:420px;margin:4px auto}
+.role-card{flex:1;background:linear-gradient(155deg,var(--surface),#2a1150);border:2px solid rgba(255,255,255,.12);border-radius:22px;padding:22px 10px;text-align:center;cursor:pointer;transition:transform .12s,border-color .15s;box-shadow:0 8px 26px rgba(124,58,237,.35)}
+.role-card:active{transform:scale(.95)}
+.role-card.parent{border-color:rgba(255,206,84,.5)}
+.role-card.kid{border-color:rgba(82,183,136,.5)}
+.role-emoji{font-size:52px;line-height:1}
+.role-label{font-weight:900;font-size:19px;margin-top:8px;color:#fff}
+.role-sub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.3}
+.how{width:100%;max-width:420px;margin:16px auto 0;padding:14px 18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:18px}
+.how-title{font-weight:900;color:var(--bright);font-size:13px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.how-step{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;color:#eadcff;line-height:1.5;margin:6px 0}
+.how-step span{flex:0 0 auto}
+.how-step b{color:#fff}

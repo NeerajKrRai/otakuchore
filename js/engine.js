@@ -112,6 +112,8 @@
     return DB.upsert('profiles', p);
   }
   function deleteProfile(id) {
+    var _p = DB.profile(id);
+    if (_p && _p.role === 'PARENT' && parents().length <= 1) return false;  // never strand the family without a parent
     DB.completions().forEach(function (c) { if (c.profileId === id && c.status === 'PENDING') DB.remove('completions', c.id); });
     DB.redemptions().forEach(function (r) { if (r.profileId === id && r.status === 'PENDING') DB.remove('redemptions', r.id); });
     DB.chores().forEach(function (c) { if (c.assignedProfileId === id) { c.assignedProfileId = null; DB.upsert('chores', c); } });
