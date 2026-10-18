@@ -253,7 +253,7 @@
     var isKid = role() === 'kid';
     var ptsLine = isKid ? '<div class="h-pts">' + p.pointsBalance + ' ⭐</div>' : '<div class="h-pts" style="color:var(--muted)">Parent</div>';
     $('app-header').innerHTML =
-      '<div class="h-logo">⚡ OtakuChore</div>' +
+      '<a class="h-logo" href="/" title="Back to all apps" style="text-decoration:none">⚡ OtakuChore</a>' +
       '<div class="h-right"><div class="h-user"><div class="h-av">' + avatarInner(p) + '</div>' +
         '<div><div class="h-name">' + esc(p.name) + '</div>' + ptsLine + '</div></div>' +
         '<span class="sync-ind hidden" id="sync-ind"></span>' +
