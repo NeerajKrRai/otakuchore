@@ -198,7 +198,7 @@
   function renderPicker(role) {
     var list = role === 'parent' ? Engine.parents() : Engine.kids();
     var slots = list.map(function (p, i) {
-      var pts = p.role === 'CHILD' ? '<div class="m-pts">' + p.pointsBalance + ' ⭐</div>' : '';
+      var pts = p.role === 'CHILD' ? '<div class="m-pts">' + Engine.balanceFor(p.id) + ' ⭐</div>' : '';
       var lock = p.pin ? '<div class="lock">🔒</div>' : '';
       return '<div class="member-slot ' + (p.role === 'PARENT' ? 'parent' : '') + '" style="animation-delay:' + (i * 0.06) + 's" onclick="UI.enterProfile(\'' + p.id + '\')">' +
         '<div class="ring">' + avatarInner(p) + lock + '</div>' +
@@ -226,6 +226,7 @@
      ENTRY — PIN unlock
      ============================================================ */
   var entryTarget = null, entryBuf = '';
+  var _pinFails = 0, _pinLockUntil = 0;   // throttle: lock the keypad after repeated wrong PINs
   function renderEntry(id) {
     entryTarget = id; entryBuf = '';
     var p = DB.profile(id);
@@ -243,6 +244,10 @@
       '</div>';
   }
   function entryKey(k) {
+    if (Date.now() < _pinLockUntil) {              // locked out after too many wrong tries
+      toast('Too many tries — wait ' + Math.ceil((_pinLockUntil - Date.now()) / 1000) + 's ⏳');
+      return;
+    }
     haptic(8);
     if (k === 'del') entryBuf = entryBuf.slice(0, -1);
     else if (entryBuf.length < 4) entryBuf += k;
@@ -250,8 +255,10 @@
     for (var i = 0; i < 4; i++) dots[i].classList.toggle('on', i < entryBuf.length);
     if (entryBuf.length === 4) {
       var p = DB.profile(entryTarget);
-      if (p && p.pin === entryBuf) { enterApp(entryTarget); }
+      if (p && p.pin === entryBuf) { _pinFails = 0; enterApp(entryTarget); }
       else {
+        _pinFails++;
+        if (_pinFails >= 5) { _pinLockUntil = Date.now() + 30000; toast('Too many tries — wait 30s ⏳'); }
         $('entry-dots').classList.add('shake');
         haptic([30, 40, 30]);
         setTimeout(function () {
@@ -293,7 +300,7 @@
   function renderMain() {
     var p = actingProfile();
     var isKid = role() === 'kid';
-    var ptsLine = isKid ? '<div class="h-pts">' + p.pointsBalance + ' ⭐</div>' : '<div class="h-pts" style="color:var(--muted)">Parent</div>';
+    var ptsLine = isKid ? '<div class="h-pts">' + Engine.balanceFor(p.id) + ' ⭐</div>' : '<div class="h-pts" style="color:var(--muted)">Parent</div>';
     $('app-header').innerHTML =
       '<a class="h-logo" href="/" title="Back to all apps" style="text-decoration:none">⚡ OtakuChore</a>' +
       '<div class="h-right"><div class="h-user"><div class="h-av">' + avatarInner(p) + '</div>' +
@@ -517,10 +524,11 @@
       html += '<div class="sec-sub" style="margin-top:14px">Rewards kids want to buy</div>';
       reds.forEach(function (r) {
         var reward = DB.reward(r.rewardId), kid = DB.profile(r.profileId);
-        var afford = kid.pointsBalance >= r.cost;
+        var kidBal = Engine.balanceFor(kid.id);
+        var afford = kidBal >= r.cost;
         html += '<div class="queue-card" style="border-color:var(--pink)"><div class="queue-head"><div class="queue-emoji">🎁</div>' +
           '<div class="queue-info"><div class="queue-title">' + esc(reward.title) + '</div>' +
-            '<div class="queue-sub">' + esc(kid.name) + ' wants this • ' + r.cost + ' ⭐ • has ' + kid.pointsBalance + ' ⭐' +
+            '<div class="queue-sub">' + esc(kid.name) + ' wants this • ' + r.cost + ' ⭐ • has ' + kidBal + ' ⭐' +
             (afford ? '' : ' • <span style="color:var(--red)">not enough now</span>') + '</div></div></div>' +
           '<div class="queue-actions"><button class="q-approve" onclick="UI.approveReward(\'' + r.id + '\')">✓ Give it</button>' +
           '<button class="q-reject" onclick="UI.rejectReward(\'' + r.id + '\')">✗ Not yet</button></div></div>';
@@ -579,7 +587,7 @@
       var meta = [];
       if (p.role === 'CHILD') {
         var b = Engine.badgeFor(Engine.lifetimeEarned(p.id));
-        meta.push(p.pointsBalance + ' ⭐');
+        meta.push(Engine.balanceFor(p.id) + ' ⭐');
         meta.push('🔥 ' + Engine.streakFor(p.id));
         if (b) meta.push(b.emoji + ' ' + b.label);
       } else meta.push('Parent');
@@ -693,7 +701,7 @@
       '<div class="hero"><div class="hero-av">' + avatarInner(p) + '</div>' +
         '<div class="hero-info"><div class="hero-name">' + esc(p.name) + '</div>' +
           '<div class="hero-chips">' +
-            '<span class="chip-stat pts">⭐ ' + p.pointsBalance + '</span>' +
+            '<span class="chip-stat pts">⭐ ' + Engine.balanceFor(p.id) + '</span>' +
             '<span class="chip-stat streak">🔥 ' + streak + ' day' + (streak === 1 ? '' : 's') + '</span>' +
             (badge ? '<span class="chip-stat badge">' + badge.emoji + ' ' + badge.label + '</span>' : '') +
           '</div></div></div>';
@@ -750,21 +758,22 @@
      ============================================================ */
   function renderKidRewards(body) {
     var p = actingProfile();
+    var bal = Engine.balanceFor(p.id);
     var rewards = DB.rewards().filter(function (r) { return r.active; });
     var myPending = DB.redemptions().filter(function (r) { return r.profileId === p.id && r.status === 'PENDING'; });
     var pendingIds = {}; myPending.forEach(function (r) { pendingIds[r.rewardId] = true; });
     var html = '<div class="wrap"><div class="sec-title">🎁 Reward Store</div>' +
-      '<div class="sec-sub">You have <b style="color:var(--gold)">' + p.pointsBalance + ' ⭐</b></div>';
+      '<div class="sec-sub">You have <b style="color:var(--gold)">' + bal + ' ⭐</b></div>';
     if (!rewards.length) { html += emptyState('🎁', 'No rewards yet', 'Ask a parent to add some!'); }
     else {
       html += '<div class="reward-grid">';
       rewards.forEach(function (r) {
-        var afford = p.pointsBalance >= r.cost;
+        var afford = bal >= r.cost;
         var isGoal = p.goalRewardId === r.id;
         var btn;
         if (pendingIds[r.id]) btn = '<button class="reward-btn pending" disabled>Requested ⏳</button>';
         else if (afford) btn = '<button class="reward-btn get" onclick="UI.redeem(\'' + r.id + '\')">Get it 🎉</button>';
-        else btn = '<button class="reward-btn need" disabled>' + (r.cost - p.pointsBalance) + ' ⭐ to go</button>';
+        else btn = '<button class="reward-btn need" disabled>' + (r.cost - bal) + ' ⭐ to go</button>';
         html += '<div class="reward-card' + (afford ? '' : ' locked') + '"><div class="reward-emoji">🎁</div>' +
           '<div class="reward-title">' + esc(r.title) + '</div>' +
           (r.description ? '<div class="reward-desc">' + esc(r.description) + '</div>' : '') +
@@ -842,6 +851,7 @@
       case 'synced':   return { cls: 'ok',   label: 'Synced' };
       case 'syncing':  return { cls: 'busy', label: 'Syncing…' };
       case 'offline':  return { cls: 'off',  label: 'Offline — will sync when back online' };
+      case 'full':     return { cls: 'err',  label: 'Sync paused — this family has too much history to sync (a grown-up can Reset or start fresh)' };
       case 'error':    return { cls: 'err',  label: 'Sync problem' };
       case 'unlinked': return { cls: 'idle', label: 'Not synced' };
       default:         return { cls: 'idle', label: '' };

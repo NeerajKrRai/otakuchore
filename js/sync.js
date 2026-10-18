@@ -112,6 +112,7 @@
         pushSoon();
         return;
       }
+      if (r.status === 413) { setStatus('full'); return; }    // doc hit the size cap — retrying won't help, say so clearly
       _dirty = true; setStatus(r.status === 401 ? 'error' : 'offline');
     }).catch(function () { _dirty = true; setStatus('offline'); }).then(function () { _pushing = false; });
   }

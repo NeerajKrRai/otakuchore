@@ -85,6 +85,12 @@
   function lifetimeEarned(profileId) {
     return DB.ledger().reduce(function (s, e) { return (e.profileId === profileId && e.delta > 0) ? s + e.delta : s; }, 0);
   }
+  // Current balance = sum of ALL ledger deltas (earns − spends). Derived, never stored, so
+  // concurrent approvals/redemptions on two synced devices can't lose or double-count stars
+  // (each ledger entry is its own record, merged by union — unlike a single LWW counter).
+  function balanceFor(profileId) {
+    return DB.ledger().reduce(function (s, e) { return e.profileId === profileId ? s + (e.delta || 0) : s; }, 0);
+  }
   function streakFor(profileId) {
     return computeStreak(DB.ledger().filter(function (e) { return e.profileId === profileId && e.delta > 0; }).map(function (e) { return e.createdAt; }));
   }
@@ -183,7 +189,7 @@
     var chore = DB.chore(comp.choreId), profile = DB.profile(comp.profileId);
     if (!chore || !profile) { comp.status = 'REJECTED'; comp.approvedAt = DB.now(); DB.upsert('completions', comp); return null; }
     var pts = chore.points;
-    updateProfile(profile.id, { pointsBalance: profile.pointsBalance + pts });
+    updateProfile(profile.id, { pointsBalance: balanceFor(profile.id) + pts }); // field kept as a fallback; display uses balanceFor()
     addLedger(profile.id, +pts, chore.title, 'CHORE', comp.id);
     comp.status = 'APPROVED'; comp.pointsAwarded = pts; comp.approvedAt = DB.now();
     DB.upsert('completions', comp);
@@ -223,7 +229,7 @@
   function requestRedemption(rewardId, profileId) {
     var reward = DB.reward(rewardId), profile = DB.profile(profileId);
     if (!reward || !profile) return null;
-    if (profile.pointsBalance < reward.cost) return null;
+    if (balanceFor(profileId) < reward.cost) return null;
     var dup = DB.redemptions().find(function (r) { return r.rewardId === rewardId && r.profileId === profileId && r.status === 'PENDING'; });
     if (dup) return dup;
     return DB.upsert('redemptions', { id: DB.uuid(), rewardId: rewardId, profileId: profileId, cost: reward.cost, status: 'PENDING', requestedAt: DB.now(), resolvedAt: null });
@@ -233,8 +239,8 @@
     if (!red || red.status !== 'PENDING') return { ok: false };
     var profile = DB.profile(red.profileId), reward = DB.reward(red.rewardId);
     if (!profile) { red.status = 'REJECTED'; red.resolvedAt = DB.now(); DB.upsert('redemptions', red); return { ok: false }; }
-    if (profile.pointsBalance < red.cost) return { ok: false, reason: 'unaffordable' };
-    updateProfile(profile.id, { pointsBalance: profile.pointsBalance - red.cost });
+    if (balanceFor(profile.id) < red.cost) return { ok: false, reason: 'unaffordable' };
+    updateProfile(profile.id, { pointsBalance: balanceFor(profile.id) - red.cost });
     addLedger(profile.id, -red.cost, reward ? reward.title : 'Reward', 'REDEMPTION', red.id);
     red.status = 'APPROVED'; red.resolvedAt = DB.now();
     DB.upsert('redemptions', red);
@@ -255,7 +261,8 @@
   function goalProgress(profile) {
     if (!profile || !profile.goalRewardId) return null;
     var reward = DB.reward(profile.goalRewardId); if (!reward) return null;
-    return { reward: reward, frac: Math.min(1, profile.pointsBalance / Math.max(1, reward.cost)), remaining: Math.max(0, reward.cost - profile.pointsBalance), enough: profile.pointsBalance >= reward.cost };
+    var bal = balanceFor(profile.id);
+    return { reward: reward, frac: Math.min(1, bal / Math.max(1, reward.cost)), remaining: Math.max(0, reward.cost - bal), enough: bal >= reward.cost };
   }
 
   /* ---------------- activity feed ---------------- */
@@ -272,7 +279,7 @@
     POINT_CHOICES: POINT_CHOICES, AVATAR_EMOJIS: AVATAR_EMOJIS,
     STARTER_CHORES: STARTER_CHORES, STARTER_REWARDS: STARTER_REWARDS, BADGES: BADGES,
     catInfo: catInfo, routineInfo: routineInfo, cadenceLabel: cadenceLabel, dayKey: dayKey, todayKey: todayKey,
-    computeStreak: computeStreak, badgeFor: badgeFor, lifetimeEarned: lifetimeEarned, streakFor: streakFor,
+    computeStreak: computeStreak, badgeFor: badgeFor, lifetimeEarned: lifetimeEarned, streakFor: streakFor, balanceFor: balanceFor,
     createFamily: createFamily, addProfile: addProfile, updateProfile: updateProfile, deleteProfile: deleteProfile,
     kids: kids, parents: parents, hasParentPin: hasParentPin,
     addChore: addChore, updateChore: updateChore, deleteChore: deleteChore, seedStarterChores: seedStarterChores,
